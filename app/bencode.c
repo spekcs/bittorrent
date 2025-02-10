@@ -30,6 +30,7 @@ char* decode_int(const char* bencoded_value) {
 
             char* decoded_str = (char*)malloc(len);
             strncpy(decoded_str, &bencoded_value[1], len-2);
+            decoded_str[len] = '\0';
             return decoded_str;
         } else {
             fprintf(stderr, "Invalid encoded value: %s\n", bencoded_value);
