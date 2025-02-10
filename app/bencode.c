@@ -23,7 +23,7 @@ char* decode_int(const char* bencoded_value) {
         if (end_index != NULL) {
             int len = strlen(bencoded_value);
             
-            if (len > 3 && bencoded_value[1] == '0') {
+        if (len > 3 && bencoded_value[1] == '0') {
             fprintf(stderr, "Encoded integer can't have leading zeroes.");
             exit(1);
         }

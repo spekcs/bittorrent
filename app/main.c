@@ -36,7 +36,11 @@ int main(int argc, char* argv[]) {
         fprintf(stderr, "Logs from your program will appear here!\n");
         const char* encoded_str = argv[2];
         char* decoded_str = decode_bencode(encoded_str);
-        printf("\"%s\"\n", decoded_str);
+        if (is_digit(decoded_str[0]) || decoded_str[0] == '-') {
+            printf("%s\n", decoded_str);
+        } else {
+            printf("\"%s\"\n", decoded_str);
+        }
         free(decoded_str);
     } else {
         fprintf(stderr, "Unknown command: %s\n", command);
