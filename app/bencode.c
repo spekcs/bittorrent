@@ -45,8 +45,14 @@ char* decode_int(const char* bencoded_value) {
 char* decode_list(const char* bencoded_value) {
     int len = strlen(bencoded_value);
     char* result = (char*)malloc(len);
-    strcat(result, "[");
     int curr = 1;
+
+    if (bencoded_value[1] == 'e') {
+        strcat(result, "[]\n\0");
+        return result;
+    }
+
+    strcat(result, "[");
 
     while (curr < len - 1) {
         if (is_digit(*(bencoded_value + curr))) {
