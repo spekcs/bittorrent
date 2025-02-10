@@ -28,7 +28,7 @@ char* decode_int(const char* bencoded_value) {
             exit(1);
         }
 
-            char* decoded_str = (char*)malloc(len);
+            char* decoded_str = (char*)malloc(len - 1);
             strncpy(decoded_str, &bencoded_value[1], len-2);
             decoded_str[len] = '\0';
             return decoded_str;
