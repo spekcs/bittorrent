@@ -4,17 +4,19 @@
 #include <stdbool.h>
 #include "bencode.h"
 
-bool is_digit(char c) {
-    return c >= '0' && c <= '9';
-}
 
-char* decode_bencode(const char* bencoded_value) {
+void* decode_bencode(const char* bencoded_value) {
     if (is_digit(bencoded_value[0])) { 
+        fprintf(stderr, "Enconding string\n");
         return decode_str(bencoded_value);
     } else if (bencoded_value[0] == 'i') {
+        fprintf(stderr, "Enconding int\n");
         return decode_int(bencoded_value);
+    } else if (bencoded_value[0] == 'l') {
+        fprintf(stderr, "Encoding list\n");
+        return decode_list(bencoded_value);
     } else {
-        fprintf(stderr, "Only strings are supported at the moment\n");
+        fprintf(stderr, "Invalid encoding.");
         exit(1);
     }
 }
@@ -37,6 +39,8 @@ int main(int argc, char* argv[]) {
         const char* encoded_str = argv[2];
         char* decoded_str = decode_bencode(encoded_str);
         if (is_digit(decoded_str[0]) || decoded_str[0] == '-') {
+            printf("%s\n", decoded_str);
+        } else if (decoded_str[0] == '[') {
             printf("%s\n", decoded_str);
         } else {
             printf("\"%s\"\n", decoded_str);
