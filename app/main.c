@@ -5,7 +5,7 @@
 #include "bencode.h"
 
 
-void* decode_bencode(const char* bencoded_value) {
+d_res_t* decode_bencode(const char* bencoded_value) {
     if (is_digit(bencoded_value[0])) { 
         fprintf(stderr, "Enconding string\n");
         return decode_str(bencoded_value);
@@ -15,10 +15,26 @@ void* decode_bencode(const char* bencoded_value) {
     } else if (bencoded_value[0] == 'l') {
         fprintf(stderr, "Encoding list\n");
         return decode_list(bencoded_value);
-    } else {
+    } 
+    else {
         fprintf(stderr, "Invalid encoding.");
         exit(1);
     }
+}
+
+void print_list(d_res_t* decoded_str) {
+    printf("[");
+    for (int i = 0; i < decoded_str->data.v_list->len; i++) { 
+        switch (decoded_str->data.v_list->data[i]->type) {
+            case INT_TYPE:
+                printf("%d", decoded_str->data.v_list->data[i]->data.v_int);  
+                break;
+            case LIST_TYPE:
+                print_list(decoded_str->data.v_list->data[i]);
+                break;
+        }
+    }
+    printf("]");
 }
 
 int main(int argc, char* argv[]) {
@@ -34,18 +50,20 @@ int main(int argc, char* argv[]) {
     const char* command = argv[1];
 
     if (strcmp(command, "decode") == 0) {
-    	// You can use print statements as follows for debugging, they'll be visible when running tests.
-        fprintf(stderr, "Logs from your program will appear here!\n");
         const char* encoded_str = argv[2];
-        char* decoded_str = decode_bencode(encoded_str);
-        if (is_digit(decoded_str[0]) || decoded_str[0] == '-') {
-            printf("%s\n", decoded_str);
-        } else if (decoded_str[0] == '[') {
-            printf("%s\n", decoded_str);
-        } else {
-            printf("\"%s\"\n", decoded_str);
+        d_res_t* decoded_str = decode_bencode(encoded_str);
+        switch (decoded_str->type) {
+            case STRING_TYPE:
+                printf("\"%s\"\n", decoded_str->data.v_str);
+                break;
+            case INT_TYPE:
+                printf("%d\n", decoded_str->data.v_int);
+                break;
+            case LIST_TYPE:
+                print_list(decoded_str);           
+                printf("\n");
         }
-        free(decoded_str);
+        d_res_free(decoded_str);
     } else {
         fprintf(stderr, "Unknown command: %s\n", command);
         return 1;
