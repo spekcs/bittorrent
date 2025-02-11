@@ -22,16 +22,31 @@ d_res_t* decode_bencode(const char* bencoded_value) {
     }
 }
 
+void print_int(d_res_t* decoded_str, int iter) {
+    printf("%ld", decoded_str->data.v_list->data[iter]->data.v_long);  
+}
+
+void print_str(d_res_t* decoded_str, int iter) {
+    printf("\"%s\"", decoded_str->data.v_list->data[iter]->data.v_str);
+}
+
 void print_list(d_res_t* decoded_str) {
     printf("[");
     for (int i = 0; i < decoded_str->data.v_list->len; i++) { 
         switch (decoded_str->data.v_list->data[i]->type) {
-            case INT_TYPE:
-                printf("%d", decoded_str->data.v_list->data[i]->data.v_int);  
+            case LONG_TYPE:
+                print_int(decoded_str, i);
                 break;
             case LIST_TYPE:
                 print_list(decoded_str->data.v_list->data[i]);
                 break;
+            case STRING_TYPE:
+                print_str(decoded_str, i);
+                break;
+        }
+        
+        if (i < decoded_str->data.v_list->len - 1) {
+            printf(",");
         }
     }
     printf("]");
@@ -56,8 +71,8 @@ int main(int argc, char* argv[]) {
             case STRING_TYPE:
                 printf("\"%s\"\n", decoded_str->data.v_str);
                 break;
-            case INT_TYPE:
-                printf("%d\n", decoded_str->data.v_int);
+            case LONG_TYPE:
+                printf("%ld\n", decoded_str->data.v_long);
                 break;
             case LIST_TYPE:
                 print_list(decoded_str);           

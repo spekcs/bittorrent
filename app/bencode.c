@@ -40,11 +40,13 @@ d_res_t* decode_int(const char* bencoded_value) {
 
         char* decoded_str = (char*)malloc(len + 1);
         strncpy(decoded_str, &bencoded_value[1], len);
-        int decoded_int = atoi(decoded_str);
+        fprintf(stderr,"Decoded str: %s", decoded_str);
+        long decoded_int = atol(decoded_str);
+        fprintf(stderr,"Decoded int: %ld\n", decoded_int);
         free(decoded_str);
         d_res_t* result = malloc(sizeof(d_res_t));
-        result->type = INT_TYPE;
-        result->data.v_int = decoded_int;
+        result->type = LONG_TYPE;
+        result->data.v_long = decoded_int;
 
         return result;
     } else {
@@ -121,6 +123,28 @@ d_res_t* decode_list(const char* bencoded_value) {
             ref_list->len++;
 
             current_index += substr_len - 1;
+        } else if (is_digit(bencoded_value[current_index])){
+            const char* colon_index = strchr((bencoded_value + current_index), ':');
+            int colon_relative_index = colon_index - (bencoded_value + current_index);
+            fprintf(stderr, "Colon: %d\n", colon_relative_index);
+            char* substr_len = malloc(length);
+            strncpy(substr_len, (bencoded_value + current_index), colon_relative_index);
+            int substring_length_bytes = atoi(substr_len);
+            fprintf(stderr, "Substr len in bytes: %d\n", substring_length_bytes);
+
+            free(substr_len);
+
+            char* substr_encoded = malloc(substring_length_bytes);
+            strncpy(substr_encoded, (bencoded_value + current_index), substring_length_bytes + colon_relative_index + 1);
+            d_res_t* result = decode_str(substr_encoded);
+
+            ref_list->data[ref_list->len] = result;
+            ref_list->len++;
+
+            free(substr_encoded);
+            current_index += substring_length_bytes;
+            current_index += colon_relative_index;
+
         } else if (bencoded_value[current_index] == 'e' && ref_list != res_list) {
             fprintf(stderr, "Popped frame\n");
             sp--;
@@ -208,7 +232,7 @@ void d_res_free(d_res_t* d_res) {
         case STRING_TYPE:
             free(d_res->data.v_str);
             break;
-        case INT_TYPE:
+        case LONG_TYPE:
             break;
         default:
             break;

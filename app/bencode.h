@@ -14,7 +14,7 @@ typedef struct {
 } dict_t;
 
 typedef union {
-	int v_int;
+	long v_long;
 	char* v_str;
 	array_list_t* v_list;
 	dict_t* v_dict;
@@ -22,7 +22,7 @@ typedef union {
 
 
 typedef enum {
-	INT_TYPE,
+	LONG_TYPE,
 	STRING_TYPE,
 	LIST_TYPE,
 	DICT_TYPE,
