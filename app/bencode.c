@@ -54,29 +54,9 @@ d_res_t* decode_int(const char* bencoded_value) {
         exit(1);
     }
 }
-//  
-// static list_item decode_list_helper(const char* bencoded_value, array_list_t* reference_list, int current_index, int length) {
-//     while (current_index < length) {
-//         if (bencoded_value[current_index] == 'l') {
-//             array_list_t* temp_list = malloc(sizeof(array_list_t));
-//             list_item* list_items = malloc(sizeof(list_item) * length);
-//             temp_list->data = list_items;
-//             temp_list->len = 1;
-//             temp_list->data[0] = decode_list_helper(bencoded_value, temp_list, current_index + 1, length);
-//             reference_list->data[reference_list->len].data.v_list = temp_list;
-//         } 
-//     }
-//     list_item* res = malloc(sizeof(list_item));
-//     res->data.v_list = reference_list;
-//     return *res;
-// }
 
-d_res_t* decode_list(const char* bencoded_value) {
+d_res_t* decode_list(const char* bencoded_value, int* current_index) {
     int length = strlen(bencoded_value);
-
-    array_list_t* stack[length];
-    array_list_t** sp = stack;
-
 
     array_list_t* res_list = malloc(sizeof(array_list_t));
     d_res_t** list_items = malloc(sizeof(d_res_t*) * length);
@@ -84,142 +64,163 @@ d_res_t* decode_list(const char* bencoded_value) {
     res_list->len = 0;
 
 
-
-    int current_index = 1;
-    array_list_t* ref_list = res_list;
-    array_list_t* prev_list;
-
-    *sp = ref_list;
-    sp++;
-    
-    while (current_index < length) {
-        if (bencoded_value[current_index] == 'l') {
-            array_list_t* new_list = malloc(sizeof(array_list_t));
-            d_res_t** new_list_items = malloc(sizeof(d_res_t*) * length);
-            new_list->data = new_list_items;
-            new_list->len = 0;
-            
-            d_res_t* list_item = malloc(sizeof(d_res_t));
-            list_item->data.v_list = new_list;
-            list_item->type = LIST_TYPE;
-            ref_list->data[ref_list->len] = list_item;
-            ref_list->len++;
-
-            //push reference list onto the stack
-            *sp = ref_list;
-            sp++;
-
-            ref_list = new_list;
+    while (*current_index < length) {
+        if (bencoded_value[*current_index] == 'l') {
+            (*current_index)++;
+            d_res_t* result = decode_list(bencoded_value, current_index);
+            res_list->data[res_list->len] = result;
+            res_list->len++;
         } 
-        else if (bencoded_value[current_index] == 'i') {
-            int substr_len = strchr((bencoded_value + current_index), 'e') - (bencoded_value + current_index) + 1;
+        else if (bencoded_value[*current_index] == 'i') {
+            int substr_len = strchr((bencoded_value + *current_index), 'e') - (bencoded_value + *current_index) + 1;
             char* encoded_str = malloc(substr_len + 1);
             encoded_str[substr_len] = '\0';
-            strncpy(encoded_str, (bencoded_value + current_index), substr_len);
+            strncpy(encoded_str, (bencoded_value + *current_index), substr_len);
             d_res_t* result = decode_int(encoded_str);
             free(encoded_str);
 
-            ref_list->data[ref_list->len] = result;
-            ref_list->len++;
+            res_list->data[res_list->len] = result;
+            res_list->len++;
 
-            current_index += substr_len - 1;
-        } else if (is_digit(bencoded_value[current_index])){
-            const char* colon_index = strchr((bencoded_value + current_index), ':');
-            int colon_relative_index = colon_index - (bencoded_value + current_index);
+            *current_index += substr_len - 1;
+        } else if (is_digit(bencoded_value[*current_index])){
+            const char* colon_index = strchr((bencoded_value + *current_index), ':');
+            int colon_relative_index = colon_index - (bencoded_value + *current_index);
             fprintf(stderr, "Colon: %d\n", colon_relative_index);
             char* substr_len = malloc(length);
-            strncpy(substr_len, (bencoded_value + current_index), colon_relative_index);
+            strncpy(substr_len, (bencoded_value + *current_index), colon_relative_index);
             int substring_length_bytes = atoi(substr_len);
             fprintf(stderr, "Substr len in bytes: %d\n", substring_length_bytes);
 
             free(substr_len);
 
             char* substr_encoded = malloc(substring_length_bytes);
-            strncpy(substr_encoded, (bencoded_value + current_index), substring_length_bytes + colon_relative_index + 1);
+            strncpy(substr_encoded, (bencoded_value + *current_index), substring_length_bytes + colon_relative_index + 1);
             d_res_t* result = decode_str(substr_encoded);
 
-            ref_list->data[ref_list->len] = result;
-            ref_list->len++;
+            res_list->data[res_list->len] = result;
+            res_list->len++;
 
             free(substr_encoded);
-            current_index += substring_length_bytes;
-            current_index += colon_relative_index;
+            *current_index += substring_length_bytes;
+            *current_index += colon_relative_index;
 
-        } else if (bencoded_value[current_index] == 'e' && ref_list != res_list) {
-            fprintf(stderr, "Popped frame\n");
-            sp--;
-            ref_list = *sp;
+        } else if (bencoded_value[*current_index == 'e']) {
+            d_res_t* result = malloc(sizeof(d_res_t));
+            result->type = LIST_TYPE;
+            result->data.v_list = res_list;
+            return result;
+
         }
-        current_index++;
+        (*current_index)++;
     }
-
-
-    d_res_t* result = malloc(sizeof(d_res_t));
-    result->type = LIST_TYPE;
-    result->data.v_list = res_list;
-    return result;
+    fprintf(stderr, "Invalid list encoding, didn't end");
+    exit(1);
 }
 
+d_res_t* decode_dict(const char* bencoded_value, int* current_index) {
+    int length = strlen(bencoded_value);
 
-//d_res_t* decode_list(const char* bencoded_value) {
-//     int len = strlen(bencoded_value);
-//     char* result = (char*)calloc(len, sizeof(char));
-//     int curr = 0;
-//     int int_started_count = 0;
-// 
-//     if (bencoded_value[1] == 'e') {
-//         strcat(result, "[]\0");
-//         return result;
-//     }
-// 
-//     while (curr < len - 1) {
-//         if (*(bencoded_value + curr) == 'l') {
-//             strcat(result, "[");
-//             curr++;
-//             continue;
-//         } else if (is_digit(*(bencoded_value + curr))) {
-//             strcat(result, "\"");
-//             const char* colon_index = strchr((bencoded_value + curr), ':');
-//             int colon_relative_index = colon_index - (bencoded_value + curr);
-//             fprintf(stderr, "Colon: %d\n", colon_relative_index);
-//             char* substr_len = malloc(len);
-//             strncpy(substr_len, (bencoded_value + curr), colon_relative_index);
-//             int substring_length_bytes = atoi(substr_len);
-//             fprintf(stderr, "Substr len in bytes: %d\n", substring_length_bytes);
-// 
-//             free(substr_len);
-// 
-//             char* substr_encoded = malloc(substring_length_bytes);
-//             strncpy(substr_encoded, (bencoded_value + curr), substring_length_bytes + colon_relative_index + 1);
-//             char* substr = decode_str(substr_encoded);
-//             strcat(result, substr);
-//             free(substr_encoded);
-//             free(substr);
-//             strcat(result, "\"");
-//             curr += substring_length_bytes;
-//             curr += colon_relative_index;
-//         } else if (*(bencoded_value + curr) == 'i') {
-//             int substr_len = strchr((bencoded_value + curr), 'e') - (bencoded_value + curr) + 1;
-//             char* encoded_str = malloc(substr_len + 1);
-//             encoded_str[substr_len] = '\0';
-//             strncpy(encoded_str, (bencoded_value + curr), substr_len);
-//             char* substr = decode_int(encoded_str);
-//             strcat(result, substr);
-//             curr += substr_len - 1;
-//             free(encoded_str);
-//             free(substr);
-//         } else if (*(bencoded_value + curr) == 'e') {
-//             strcat(result, "]");
-//             curr++;
-//             continue;
-//         }
-//         if (curr < len - 1) {
-//             strcat(result, ",");
-//         } 
-//     }
-//     strcat(result, "]\0");
-//     return result;
-// }
+    dict_t* res_dict = malloc(sizeof(dict_t));
+    array_list_t* values = malloc(sizeof(array_list_t));
+    d_res_t** values_items = malloc(sizeof(d_res_t*) * length);
+    values->data = values_items;
+    array_list_t* keys = malloc(sizeof(array_list_t));
+    d_res_t** keys_items = malloc(sizeof(d_res_t*) * length);
+    keys->data = keys_items;
+    values->len = 0;
+    keys->len = 0;
+    res_dict->values = values;
+    res_dict->keys = keys;
+
+
+    bool is_key = true;
+
+    while (*current_index < length) {
+        if (bencoded_value[*current_index] == 'd') {
+            (*current_index)++;
+            d_res_t* result = decode_dict(bencoded_value, current_index);
+            if (is_key) {
+                res_dict->keys->data[res_dict->keys->len] = result;
+                res_dict->keys->len++;
+            } else {
+                res_dict->values->data[res_dict->values->len] = result;
+                res_dict->values->len++;
+            }
+            is_key = !is_key;
+            
+        } else if (bencoded_value[*current_index] == 'i') {
+            int substr_len = strchr((bencoded_value + *current_index), 'e') - (bencoded_value + *current_index) + 1;
+            char* encoded_str = malloc(substr_len + 1);
+            encoded_str[substr_len] = '\0';
+            strncpy(encoded_str, (bencoded_value + *current_index), substr_len);
+            d_res_t* result = decode_int(encoded_str);
+            free(encoded_str);
+
+            if (is_key) {
+                is_key = false;
+                keys->data[keys->len] = result;
+                keys->len++;
+            } else {
+                is_key = true;
+                values->data[values->len] = result;
+                values->len++;
+            }
+
+            *current_index += substr_len - 1;
+        } else if (is_digit(bencoded_value[*current_index])){
+            const char* colon_index = strchr((bencoded_value + *current_index), ':');
+            int colon_relative_index = colon_index - (bencoded_value + *current_index);
+            fprintf(stderr, "Colon: %d\n", colon_relative_index);
+            char* substr_len = malloc(length);
+            strncpy(substr_len, (bencoded_value + *current_index), colon_relative_index);
+            int substring_length_bytes = atoi(substr_len);
+            fprintf(stderr, "Substr len in bytes: %d\n", substring_length_bytes);
+
+            free(substr_len);
+
+            char* substr_encoded = malloc(substring_length_bytes);
+            strncpy(substr_encoded, (bencoded_value + *current_index), substring_length_bytes + colon_relative_index + 1);
+            d_res_t* result = decode_str(substr_encoded);
+
+
+            if (is_key) {
+                is_key = false;
+                keys->data[keys->len] = result;
+                keys->len++;
+            } else {
+                is_key = true;
+                values->data[values->len] = result;
+                values->len++;
+            }
+
+            free(substr_encoded);
+            *current_index += substring_length_bytes;
+            *current_index += colon_relative_index;
+        } else if (bencoded_value[*current_index] == 'l') {
+            (*current_index)++;
+            d_res_t* result = decode_list(bencoded_value, current_index);
+
+            if (is_key) {
+                is_key = false;
+                keys->data[keys->len] = result;
+                keys->len++;
+            } else {
+                is_key = true;
+                values->data[values->len] = result;
+                values->len++;
+            }
+        } else if (bencoded_value[*current_index] == 'e') {
+            d_res_t* result = malloc(sizeof(d_res_t));
+            result->type = DICT_TYPE;
+            result->data.v_dict = res_dict;
+            return result;
+        }
+        (*current_index)++;
+    }
+    fprintf(stderr, "Invalid dict encoding, didn't finish");
+    exit(1);
+}
 
 void d_res_free(d_res_t* d_res) {
     switch (d_res->type) {

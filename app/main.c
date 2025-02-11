@@ -5,7 +5,7 @@
 #include "bencode.h"
 
 
-d_res_t* decode_bencode(const char* bencoded_value) {
+d_res_t* decode_bencode(const char* bencoded_value, int* current_index) {
     if (is_digit(bencoded_value[0])) { 
         fprintf(stderr, "Enconding string\n");
         return decode_str(bencoded_value);
@@ -14,9 +14,11 @@ d_res_t* decode_bencode(const char* bencoded_value) {
         return decode_int(bencoded_value);
     } else if (bencoded_value[0] == 'l') {
         fprintf(stderr, "Encoding list\n");
-        return decode_list(bencoded_value);
-    } 
-    else {
+        return decode_list(bencoded_value, current_index);
+    } else if (bencoded_value[0] == 'd') {
+        fprintf(stderr, "Encoding dict\n");
+        return decode_dict(bencoded_value, current_index);
+    } else {
         fprintf(stderr, "Invalid encoding.");
         exit(1);
     }
@@ -52,6 +54,56 @@ void print_list(d_res_t* decoded_str) {
     printf("]");
 }
 
+void print_dict(d_res_t* decoded_str) {
+    array_list_t* keys = decoded_str->data.v_dict->keys;
+    array_list_t* values = decoded_str->data.v_dict->values;
+
+    bool is_key = 1;
+    printf("{");
+    for (int i = 0; i < keys->len;) { 
+        if (is_key) {
+            switch (keys->data[i]->type) {
+                case LONG_TYPE:
+                    printf("%ld", keys->data[i]->data.v_long);
+                    break;
+                case LIST_TYPE:
+                    print_list(keys->data[i]);
+                    break;
+                case STRING_TYPE:
+                    printf("\"%s\"", keys->data[i]->data.v_str);
+                    break;
+                case DICT_TYPE:
+                    print_dict(keys->data[i]);
+                    break;
+            } 
+            printf(":");
+            is_key = false;
+        } else {
+            switch (values->data[i]->type) {
+                case LONG_TYPE:
+                    printf("%ld", values->data[i]->data.v_long);
+                    break;
+                case LIST_TYPE:
+                    print_list(values->data[i]);
+                    break;
+                case STRING_TYPE:
+                    printf("\"%s\"", values->data[i]->data.v_str);
+                    break;
+                case DICT_TYPE:
+                    print_dict(values->data[i]);
+                    break;
+            }
+            if (i < keys->len - 1) {
+                printf(",");
+            }
+            i++;
+            is_key = true;
+        }
+    }
+
+    printf("}");
+}
+
 int main(int argc, char* argv[]) {
 	// Disable output buffering
 	setbuf(stdout, NULL);
@@ -65,8 +117,10 @@ int main(int argc, char* argv[]) {
     const char* command = argv[1];
 
     if (strcmp(command, "decode") == 0) {
+        int* current_index = malloc(sizeof(int));
+        *current_index = 1;
         const char* encoded_str = argv[2];
-        d_res_t* decoded_str = decode_bencode(encoded_str);
+        d_res_t* decoded_str = decode_bencode(encoded_str, current_index);
         switch (decoded_str->type) {
             case STRING_TYPE:
                 printf("\"%s\"\n", decoded_str->data.v_str);
@@ -77,8 +131,14 @@ int main(int argc, char* argv[]) {
             case LIST_TYPE:
                 print_list(decoded_str);           
                 printf("\n");
+                break;
+            case DICT_TYPE:
+                print_dict(decoded_str);
+                printf("\n");
+                break;
         }
         d_res_free(decoded_str);
+        free(current_index);
     } else {
         fprintf(stderr, "Unknown command: %s\n", command);
         return 1;
