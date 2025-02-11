@@ -83,6 +83,12 @@ d_res_t* decode_list(const char* bencoded_value, int* current_index) {
             res_list->len++;
 
             *current_index += substr_len - 1;
+        } else if (bencoded_value[*current_index] == 'd') {
+            (*current_index)++;
+            d_res_t* result = decode_dict(bencoded_value, current_index);
+            res_list->data[res_list->len] = result;
+            res_list->len++;
+
         } else if (is_digit(bencoded_value[*current_index])){
             const char* colon_index = strchr((bencoded_value + *current_index), ':');
             int colon_relative_index = colon_index - (bencoded_value + *current_index);

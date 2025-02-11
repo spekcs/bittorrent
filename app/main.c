@@ -32,6 +32,8 @@ void print_str(d_res_t* decoded_str, int iter) {
     printf("\"%s\"", decoded_str->data.v_list->data[iter]->data.v_str);
 }
 
+void print_dict(d_res_t*);
+
 void print_list(d_res_t* decoded_str) {
     printf("[");
     for (int i = 0; i < decoded_str->data.v_list->len; i++) { 
@@ -45,6 +47,8 @@ void print_list(d_res_t* decoded_str) {
             case STRING_TYPE:
                 print_str(decoded_str, i);
                 break;
+            case DICT_TYPE:
+                print_dict(decoded_str->data.v_list->data[i]); 
         }
         
         if (i < decoded_str->data.v_list->len - 1) {
