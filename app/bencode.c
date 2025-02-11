@@ -10,12 +10,13 @@ bool is_digit(char c) {
 }
 
 d_res_t* decode_str(const char* bencoded_value) {
-    int length = atoi(bencoded_value); 
+    int length = atoi(bencoded_value);
     const char* colon_index = strchr(bencoded_value, ':');
     if (colon_index != NULL) {
         const char* start = colon_index + 1;
-        char* decoded_str = (char*)malloc(length + 1);
+        char* decoded_str = malloc(length + 1);
         strncpy(decoded_str, start, length);
+
         decoded_str[length] = '\0';
         d_res_t* result = malloc(sizeof(d_res_t));
         result->type = STRING_TYPE;
@@ -177,7 +178,6 @@ d_res_t* decode_dict(const char* bencoded_value, int* current_index) {
         } else if (is_digit(bencoded_value[*current_index])){
             const char* colon_index = strchr((bencoded_value + *current_index), ':');
             int colon_relative_index = colon_index - (bencoded_value + *current_index);
-            fprintf(stderr, "Colon: %d\n", colon_relative_index);
             char* substr_len = malloc(length);
             strncpy(substr_len, (bencoded_value + *current_index), colon_relative_index);
             int substring_length_bytes = atoi(substr_len);
@@ -185,7 +185,7 @@ d_res_t* decode_dict(const char* bencoded_value, int* current_index) {
 
             free(substr_len);
 
-            char* substr_encoded = malloc(substring_length_bytes);
+            char* substr_encoded = malloc(strlen(bencoded_value));
             strncpy(substr_encoded, (bencoded_value + *current_index), substring_length_bytes + colon_relative_index + 1);
             d_res_t* result = decode_str(substr_encoded);
 

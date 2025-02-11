@@ -108,6 +108,25 @@ void print_dict(d_res_t* decoded_str) {
     printf("}");
 }
 
+void print_decoded_string(d_res_t* decoded_str) {
+    switch (decoded_str->type) {
+        case STRING_TYPE:
+            printf("\"%s\"\n", decoded_str->data.v_str);
+            break;
+        case LONG_TYPE:
+            printf("%ld\n", decoded_str->data.v_long);
+            break;
+        case LIST_TYPE:
+            print_list(decoded_str);           
+            printf("\n");
+            break;
+        case DICT_TYPE:
+            print_dict(decoded_str);
+            printf("\n");
+            break;
+    }
+}
+
 int main(int argc, char* argv[]) {
 	// Disable output buffering
 	setbuf(stdout, NULL);
@@ -124,25 +143,56 @@ int main(int argc, char* argv[]) {
         int* current_index = malloc(sizeof(int));
         *current_index = 1;
         const char* encoded_str = argv[2];
+
         d_res_t* decoded_str = decode_bencode(encoded_str, current_index);
-        switch (decoded_str->type) {
-            case STRING_TYPE:
-                printf("\"%s\"\n", decoded_str->data.v_str);
-                break;
-            case LONG_TYPE:
-                printf("%ld\n", decoded_str->data.v_long);
-                break;
-            case LIST_TYPE:
-                print_list(decoded_str);           
-                printf("\n");
-                break;
-            case DICT_TYPE:
-                print_dict(decoded_str);
-                printf("\n");
-                break;
-        }
+        
+        print_decoded_string(decoded_str);
         d_res_free(decoded_str);
         free(current_index);
+    } else if (strcmp(command, "info") == 0) {
+        const char* filename = argv[2];
+        FILE* fp = fopen(filename, "r");
+        if (fp == NULL) {
+            fprintf(stderr, "No such file: %s\n", filename);
+            exit(1);
+        }
+
+        fseek(fp, 0L, SEEK_END);
+        long int file_length = ftell(fp);
+        unsigned char buf[file_length];
+        fseek(fp, 0L, SEEK_SET);
+
+        for (long int i = 0; i < file_length; i++) {
+            buf[i] = getc(fp);
+        }
+
+        
+        int* current_index = malloc(sizeof(int));
+        *current_index = 1;
+        d_res_t* decoded_string = decode_bencode(buf, current_index);
+
+        array_list_t* keys = decoded_string->data.v_dict->keys;
+        array_list_t* values = decoded_string->data.v_dict->values;
+
+        printf("%s", values->data[0]->data.v_str);
+
+        for (int i = 0; i < keys->len; i++) {
+            if (strcmp(keys->data[i]->data.v_str, "announce") == 0) {
+                printf("Tracker URL: %s\n", values->data[i]->data.v_str);
+            }
+
+            if (strcmp(keys->data[i]->data.v_str, "info") == 0) {
+                for (int j = 0; j < values->data[i]->data.v_dict->keys->len; j++) {
+                    if (strcmp(values->data[i]->data.v_dict->keys->data[j]->data.v_str, "length") == 0) {
+                        printf("Length: %ld\n", values->data[i]->data.v_dict->values->data[j]->data.v_long);
+                    }
+                }
+            }
+        }
+
+        d_res_free(decoded_string);
+        free(current_index);
+        fclose(fp);
     } else {
         fprintf(stderr, "Unknown command: %s\n", command);
         return 1;
