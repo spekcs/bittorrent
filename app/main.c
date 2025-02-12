@@ -147,18 +147,16 @@ int main(int argc, char* argv[]) {
         int file_size = ftell(fp);
         rewind(fp);
 
-
         char buf[file_size];
 
         for (int i = 0; i < file_size; i++) {
             buf[i] = getc(fp);
         }
-        
 
         int* current_index = malloc(sizeof(int));
         *current_index = 1;
-
         d_res_t* decoded_string = decode_dict((char*)buf, current_index, file_size);
+
         free(current_index);
 
         array_list_t* keys = decoded_string->data.v_dict->keys;
@@ -182,12 +180,15 @@ int main(int argc, char* argv[]) {
         }
 
 
-        char* encoded_info_dict = encode(info_dict);
+        long infodict_offset = strstr(buf, "info") - buf + 4;
+        char encoded_info_dict[file_size - infodict_offset - 1]; 
+        for (int i = 0; i < file_size - infodict_offset - 1; i++) {
+            encoded_info_dict[i] = *(buf + infodict_offset + i);
+        }
         printf("Encoded info dict: %s\n", encoded_info_dict);
         
         unsigned char hash[SHA_DIGEST_LENGTH];
-        SHA1((unsigned char*)encoded_info_dict, strlen(encoded_info_dict), hash);       
-        long infodict_offset = strstr(buf, "info") - buf + 4;
+        SHA1((unsigned char*)encoded_info_dict, file_size - infodict_offset - 1, hash);
         printf("Offset char: %c\n", buf[infodict_offset + 1]);
         
         printf("Info Hash: ");
@@ -196,7 +197,6 @@ int main(int argc, char* argv[]) {
         }
         printf("\n");
 
-        free(encoded_info_dict);
         d_res_free(decoded_string);
         fclose(fp);
     } else if (strcmp(command, "encode") == 0) {

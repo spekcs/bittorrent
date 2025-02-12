@@ -14,7 +14,6 @@ bool is_digit(char c) {
 
 static d_res_t* decode_str(const char* bencoded_value, int* current_index) {
     int length = atoi(bencoded_value);
-    printf("Strlen: %d\n", length);
     const char* colon_index = strchr(bencoded_value, ':');
     if (colon_index != NULL) {
         const char* start = colon_index + 1;
@@ -23,7 +22,6 @@ static d_res_t* decode_str(const char* bencoded_value, int* current_index) {
         for (int i = 0; i < length; i++) {
             decoded_str[i] = *(start+i);
         }
-        printf("\n");
 
         decoded_str[length] = '\0';
         d_res_t* result = malloc(sizeof(d_res_t));
@@ -115,8 +113,6 @@ static d_res_t* decode_list(const char* bencoded_value, int* current_index) {
 }
 
 d_res_t* decode_dict(const char* bencoded_value, int* current_index, long length) {
-    printf("VALUE LEN: %ld", length);
-
     dict_t* res_dict = malloc(sizeof(dict_t));
     array_list_t* values = malloc(sizeof(array_list_t));
     d_res_t** values_items = malloc(sizeof(d_res_t*) * length);
@@ -134,7 +130,7 @@ d_res_t* decode_dict(const char* bencoded_value, int* current_index, long length
 
     while (*current_index < length) {
         if (bencoded_value[*current_index] == 'd') {
-            printf("Decoding dict\n");
+            fprintf(stderr, "Decoding dict\n");
             (*current_index)++;
             d_res_t* result = decode_dict(bencoded_value, current_index, length);
             if (result == NULL) {
@@ -152,7 +148,7 @@ d_res_t* decode_dict(const char* bencoded_value, int* current_index, long length
             is_key = !is_key;
             
         } else if (bencoded_value[*current_index] == 'i') {
-            printf("Decoding int\n");
+            fprintf(stderr, "Decoding int\n");
             d_res_t* result = decode_int(bencoded_value + *current_index, current_index);
             if (result == NULL) {
                 fprintf(stderr, "Failed to decode int: %s", (bencoded_value + *current_index));
@@ -170,7 +166,7 @@ d_res_t* decode_dict(const char* bencoded_value, int* current_index, long length
             }
 
         } else if (is_digit(bencoded_value[*current_index])){
-            printf("Decoding string\n");
+            fprintf(stderr, "Decoding string\n");
             d_res_t* result = decode_str(bencoded_value + *current_index, current_index);
 
             if (result == NULL) {
@@ -189,7 +185,7 @@ d_res_t* decode_dict(const char* bencoded_value, int* current_index, long length
             }
 
         } else if (bencoded_value[*current_index] == 'l') {
-            printf("Decodeing list\n");
+            fprintf(stderr, "Decodeing list\n");
             (*current_index)++;
             d_res_t* result = decode_list(bencoded_value, current_index);
 

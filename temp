@@ -1,0 +1,41 @@
+VALUE LEN: 234Decoding string
+Strlen: 8
+
+Decoding string
+Strlen: 55
+
+Decoding string
+Strlen: 10
+
+Decoding string
+Strlen: 13
+
+Decoding string
+Strlen: 4
+
+Decoding dict
+VALUE LEN: 234Decoding string
+Strlen: 6
+
+Decoding int
+Decoding string
+Strlen: 4
+
+Decoding string
+Strlen: 10
+
+Decoding string
+Strlen: 12
+
+Decoding int
+Decoding string
+Strlen: 6
+
+Decoding string
+Strlen: 60
+
+Tracker URL: http://bittorrent-test-tracker.codecrafters.io/announce
+Length: 92063
+Encoded info dict: d6:lengthi92063e4:name10:sample.txt12:piece lengthi32768e6:pieces60:èvöz*ˆ†èókg&Ã¢—-n"uæ vfVsnÿµR­5ğ“zß‚¼	r'­šÌee
+Offset char: 6
+Info Hash: 6ea282d56886830ad089ee317e9520c622ab4ab4
