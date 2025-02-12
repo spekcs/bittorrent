@@ -1,28 +1,13 @@
+#include <stddef.h>
+#include <openssl/sha.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdbool.h>
 #include "bencode.h"
+#include "sha1.h"
 
 
-d_res_t* decode_bencode(const char* bencoded_value, int* current_index) {
-    if (is_digit(bencoded_value[0])) { 
-        fprintf(stderr, "Enconding string\n");
-        return decode_str(bencoded_value);
-    } else if (bencoded_value[0] == 'i') {
-        fprintf(stderr, "Enconding int\n");
-        return decode_int(bencoded_value);
-    } else if (bencoded_value[0] == 'l') {
-        fprintf(stderr, "Encoding list\n");
-        return decode_list(bencoded_value, current_index);
-    } else if (bencoded_value[0] == 'd') {
-        fprintf(stderr, "Encoding dict\n");
-        return decode_dict(bencoded_value, current_index);
-    } else {
-        fprintf(stderr, "Invalid encoding.");
-        exit(1);
-    }
-}
 
 void print_int(d_res_t* decoded_str, int iter) {
     printf("%ld", decoded_str->data.v_list->data[iter]->data.v_long);  
@@ -139,42 +124,47 @@ int main(int argc, char* argv[]) {
 
     const char* command = argv[1];
 
+    /* ---- DECODE ----*/
     if (strcmp(command, "decode") == 0) {
-        int* current_index = malloc(sizeof(int));
-        *current_index = 1;
         const char* encoded_str = argv[2];
 
-        d_res_t* decoded_str = decode_bencode(encoded_str, current_index);
+        d_res_t* decoded_str = decode(encoded_str);
         
         print_decoded_string(decoded_str);
         d_res_free(decoded_str);
-        free(current_index);
+
+    /* ---- INFO ----*/
     } else if (strcmp(command, "info") == 0) {
         const char* filename = argv[2];
-        FILE* fp = fopen(filename, "r");
+        FILE* fp = fopen(filename, "rb");
         if (fp == NULL) {
             fprintf(stderr, "No such file: %s\n", filename);
             exit(1);
         }
 
+        
         fseek(fp, 0L, SEEK_END);
-        long int file_length = ftell(fp);
-        unsigned char buf[file_length];
-        fseek(fp, 0L, SEEK_SET);
+        int file_size = ftell(fp);
+        rewind(fp);
 
-        for (long int i = 0; i < file_length; i++) {
+
+        char buf[file_size];
+
+        for (int i = 0; i < file_size; i++) {
             buf[i] = getc(fp);
         }
-
         
+
         int* current_index = malloc(sizeof(int));
         *current_index = 1;
-        d_res_t* decoded_string = decode_bencode(buf, current_index);
+
+        d_res_t* decoded_string = decode_dict((char*)buf, current_index, file_size);
+        free(current_index);
 
         array_list_t* keys = decoded_string->data.v_dict->keys;
         array_list_t* values = decoded_string->data.v_dict->values;
 
-        printf("%s", values->data[0]->data.v_str);
+        d_res_t* info_dict;
 
         for (int i = 0; i < keys->len; i++) {
             if (strcmp(keys->data[i]->data.v_str, "announce") == 0) {
@@ -182,6 +172,7 @@ int main(int argc, char* argv[]) {
             }
 
             if (strcmp(keys->data[i]->data.v_str, "info") == 0) {
+                info_dict = values->data[i];
                 for (int j = 0; j < values->data[i]->data.v_dict->keys->len; j++) {
                     if (strcmp(values->data[i]->data.v_dict->keys->data[j]->data.v_str, "length") == 0) {
                         printf("Length: %ld\n", values->data[i]->data.v_dict->values->data[j]->data.v_long);
@@ -190,9 +181,36 @@ int main(int argc, char* argv[]) {
             }
         }
 
+
+        char* encoded_info_dict = encode(info_dict);
+        printf("Encoded info dict: %s\n", encoded_info_dict);
+        
+        unsigned char hash[SHA_DIGEST_LENGTH];
+        SHA1((unsigned char*)encoded_info_dict, strlen(encoded_info_dict), hash);       
+        long infodict_offset = strstr(buf, "info") - buf + 4;
+        printf("Offset char: %c\n", buf[infodict_offset + 1]);
+        
+        printf("Info Hash: ");
+        for (int i = 0; i < SHA_DIGEST_LENGTH; i++) {
+            printf("%02x", hash[i]);
+        }
+        printf("\n");
+
+        free(encoded_info_dict);
         d_res_free(decoded_string);
-        free(current_index);
         fclose(fp);
+    } else if (strcmp(command, "encode") == 0) {
+
+        const char* encoded_str = argv[2];
+
+        d_res_t* decoded_str = decode(encoded_str);
+        
+        char* result = encode(decoded_str) ;
+        printf("%s", result);
+
+        free(result);
+        d_res_free(decoded_str);
+
     } else {
         fprintf(stderr, "Unknown command: %s\n", command);
         return 1;

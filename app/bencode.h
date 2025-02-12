@@ -35,10 +35,9 @@ struct DecodingResult {
 	union_type type;
 };
 
-d_res_t* decode_str(const char* bencoded_value);
-d_res_t* decode_int(const char* bencoded_value);
-d_res_t* decode_list(const char* bencoded_value, int* current_index);
-d_res_t* decode_dict(const char* bencoded_value, int* current_index);
+char* encode(d_res_t* bdecoded_object);
+d_res_t* decode(const char* bencoded_value);
+d_res_t* decode_dict(const char* bencoded_value, int* current_index, long length);
 bool is_digit(char c);
 
 void d_res_free(d_res_t*);
