@@ -48,6 +48,7 @@ static d_res_t* decode_int(const char* bencoded_value, int* current_index) {
         }
 
         char* decoded_str = (char*)malloc(len + 1);
+        decoded_str[len] = '\0';
         strncpy(decoded_str, &bencoded_value[1], len);
         long decoded_int = atol(decoded_str);
         free(decoded_str);
