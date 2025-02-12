@@ -163,6 +163,7 @@ int main(int argc, char* argv[]) {
         array_list_t* values = decoded_string->data.v_dict->values;
 
         d_res_t* info_dict;
+        long piece_length;
 
         for (int i = 0; i < keys->len; i++) {
             if (strcmp(keys->data[i]->data.v_str, "announce") == 0) {
@@ -175,11 +176,15 @@ int main(int argc, char* argv[]) {
                     if (strcmp(values->data[i]->data.v_dict->keys->data[j]->data.v_str, "length") == 0) {
                         printf("Length: %ld\n", values->data[i]->data.v_dict->values->data[j]->data.v_long);
                     }
+
+                    if (strcmp(values->data[i]->data.v_dict->keys->data[j]->data.v_str, "piece length") == 0) {
+                        piece_length = values->data[i]->data.v_dict->values->data[j]->data.v_long;
+                    }
                 }
             }
         }
 
-
+        /*---- CALCULATING SHA1 OF INFO DICT ----*/
         long infodict_offset = strstr(buf, "info") - buf + 4;
         char encoded_info_dict[file_size - infodict_offset - 1]; 
         for (int i = 0; i < file_size - infodict_offset - 1; i++) {
@@ -196,6 +201,24 @@ int main(int argc, char* argv[]) {
             printf("%02x", hash[i]);
         }
         printf("\n");
+
+        /*---- PRINTING PIECES ----*/
+
+        printf("Piece Length: %ld\n", piece_length);
+
+        printf("Piece Hashes:\n");
+        char* pieces_index = strstr(buf, "pieces");
+        char* start_index = strchr(pieces_index, ':');
+        long pieces_offset = start_index - buf + 1;
+        while (file_size - pieces_offset > SHA_DIGEST_LENGTH) {
+            for (int i = 0; i < SHA_DIGEST_LENGTH; i++) {
+                printf("%02x", (unsigned char)(*(buf + pieces_offset + i)));
+            }
+            pieces_offset += 20;
+            printf("\n");
+        }
+
+
 
         d_res_free(decoded_string);
         fclose(fp);
