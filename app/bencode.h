@@ -1,5 +1,8 @@
 #pragma once
 
+#ifndef BENCODE_H
+#define BENCODE_H
+
 struct DecodingResult;
 typedef struct DecodingResult d_res_t;
 
@@ -28,8 +31,6 @@ typedef enum {
 	DICT_TYPE,
 } union_type;
 
-
-
 struct DecodingResult {
 	d_union_t data;
 	union_type type;
@@ -40,6 +41,11 @@ d_res_t* decode(const char* bencoded_value);
 d_res_t* decode_dict(const char* bencoded_value, int* current_index, long length);
 bool is_digit(char c);
 
+void print_decoded_string(d_res_t* decoded_str);
+d_res_t* decode_from_file(const char* filename);
+
 void d_res_free(d_res_t*);
 void dict_free(dict_t*);
 void array_list_free(array_list_t*);
+
+#endif

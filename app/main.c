@@ -5,117 +5,220 @@
 #include <string.h>
 #include <stdbool.h>
 #include "bencode.h"
-#include "sha1.h"
+#include <curl/curl.h>
+#include <curl/easy.h>
+#include "file.h"
+#include "request.h"
 
+#define UNIQUE_CLIENT_ID "geZCJhqS1MliO2Ju9O9S"
+#define LISTENING_PORT 6881
 
+typedef struct {
+    char* string;
+    size_t size;
+} response_t;
 
-void print_int(d_res_t* decoded_str, int iter) {
-    printf("%ld", decoded_str->data.v_list->data[iter]->data.v_long);  
+size_t write_chunk(void* data, size_t size, size_t nmemb, void* userdata);
+
+static void handle_decode(const char* encoded_str) {
+    d_res_t* decoded_str = decode(encoded_str);
+    if (decoded_str == NULL) {
+        fprintf(stderr, "Unable to decode string, something went wrong");
+        exit(1);
+    }
+    print_decoded_string(decoded_str);
+    d_res_free(decoded_str);
 }
 
-void print_str(d_res_t* decoded_str, int iter) {
-    printf("\"%s\"", decoded_str->data.v_list->data[iter]->data.v_str);
-}
 
-void print_dict(d_res_t*);
 
-void print_list(d_res_t* decoded_str) {
-    printf("[");
-    for (int i = 0; i < decoded_str->data.v_list->len; i++) { 
-        switch (decoded_str->data.v_list->data[i]->type) {
-            case LONG_TYPE:
-                print_int(decoded_str, i);
-                break;
-            case LIST_TYPE:
-                print_list(decoded_str->data.v_list->data[i]);
-                break;
-            case STRING_TYPE:
-                print_str(decoded_str, i);
-                break;
-            case DICT_TYPE:
-                print_dict(decoded_str->data.v_list->data[i]); 
-        }
-        
-        if (i < decoded_str->data.v_list->len - 1) {
-            printf(",");
+static d_res_t* get_info_dict(d_res_t* decoded_obj) {
+    d_res_t* info_dict;
+
+    array_list_t* keys = decoded_obj->data.v_dict->keys;
+    array_list_t* values = decoded_obj->data.v_dict->values;
+
+    for (int i = 0; i < keys->len; i++) {
+        if (strcmp(keys->data[i]->data.v_str, "info") == 0) {
+            info_dict = values->data[i];
         }
     }
-    printf("]");
+
+    return info_dict;
 }
 
-void print_dict(d_res_t* decoded_str) {
-    array_list_t* keys = decoded_str->data.v_dict->keys;
-    array_list_t* values = decoded_str->data.v_dict->values;
+static char* get_tracker_url(d_res_t* decoded_obj) {
+    array_list_t* keys = decoded_obj->data.v_dict->keys;
+    array_list_t* values = decoded_obj->data.v_dict->values;
 
-    bool is_key = 1;
-    printf("{");
-    for (int i = 0; i < keys->len;) { 
-        if (is_key) {
-            switch (keys->data[i]->type) {
-                case LONG_TYPE:
-                    printf("%ld", keys->data[i]->data.v_long);
-                    break;
-                case LIST_TYPE:
-                    print_list(keys->data[i]);
-                    break;
-                case STRING_TYPE:
-                    printf("\"%s\"", keys->data[i]->data.v_str);
-                    break;
-                case DICT_TYPE:
-                    print_dict(keys->data[i]);
-                    break;
-            } 
-            printf(":");
-            is_key = false;
-        } else {
-            switch (values->data[i]->type) {
-                case LONG_TYPE:
-                    printf("%ld", values->data[i]->data.v_long);
-                    break;
-                case LIST_TYPE:
-                    print_list(values->data[i]);
-                    break;
-                case STRING_TYPE:
-                    printf("\"%s\"", values->data[i]->data.v_str);
-                    break;
-                case DICT_TYPE:
-                    print_dict(values->data[i]);
-                    break;
+    for (int i = 0; i < keys->len; i++) {
+        if (strcmp(keys->data[i]->data.v_str, "announce") == 0) {
+            return values->data[i]->data.v_str;
+        }
+    }
+
+    fprintf(stderr, "Tracker URL not found");
+    exit(1);
+}
+
+static unsigned char* get_info_dict_hash(const char* filename) {
+    long file_size = get_file_length(filename);
+    char* buf = get_file_contents(filename);
+
+    long infodict_offset = strstr(buf, "info") - buf + 4;
+    char encoded_info_dict[file_size - infodict_offset - 1]; 
+    for (int i = 0; i < file_size - infodict_offset - 1; i++) {
+        encoded_info_dict[i] = *(buf + infodict_offset + i);
+    }
+    
+    unsigned char* hash = malloc(SHA_DIGEST_LENGTH);
+    SHA1((unsigned char*)encoded_info_dict, file_size - infodict_offset - 1, hash);
+
+    return hash;
+}
+
+static void handle_info(const char* filename) {
+    d_res_t* decoded_string = decode_from_file(filename);
+
+    array_list_t* keys = decoded_string->data.v_dict->keys;
+    array_list_t* values = decoded_string->data.v_dict->values;
+
+    d_res_t* info_dict = get_info_dict(decoded_string);
+    long piece_length;
+
+    char* tracker_url = get_tracker_url(decoded_string);
+    printf("Tracker URL: %s\n", tracker_url);
+
+
+    for (int i = 0; i < keys->len; i++) {
+        if (strcmp(keys->data[i]->data.v_str, "info") == 0) {
+            for (int j = 0; j < values->data[i]->data.v_dict->keys->len; j++) {
+                if (strcmp(values->data[i]->data.v_dict->keys->data[j]->data.v_str, "length") == 0) {
+                    printf("Length: %ld\n", values->data[i]->data.v_dict->values->data[j]->data.v_long);
+                }
+
+                if (strcmp(values->data[i]->data.v_dict->keys->data[j]->data.v_str, "piece length") == 0) {
+                    piece_length = values->data[i]->data.v_dict->values->data[j]->data.v_long;
+                }
             }
-            if (i < keys->len - 1) {
-                printf(",");
-            }
-            i++;
-            is_key = true;
         }
     }
 
-    printf("}");
+    d_res_free(decoded_string);
+
+    /*---- CALCULATING SHA1 OF INFO DICT ----*/
+    unsigned char* hash = get_info_dict_hash(filename);
+    for (int i = 0; i < SHA_DIGEST_LENGTH; i++) {
+        printf("%02x", hash[i]);
+    }
+    printf("\n");
+    free(hash);
+
+    /*---- PRINTING PIECES ----*/
+
+    long file_size = get_file_length(filename);
+    char* buf = get_file_contents(filename);
+
+    printf("Piece Length: %ld\n", piece_length);
+
+    printf("Piece Hashes:\n");
+    char* pieces_index = strstr(buf, "pieces");
+    char* start_index = strchr(pieces_index, ':');
+    long pieces_offset = start_index - buf + 1;
+    while (file_size - pieces_offset > SHA_DIGEST_LENGTH) {
+        for (int i = 0; i < SHA_DIGEST_LENGTH; i++) {
+            printf("%02x", (unsigned char)(*(buf + pieces_offset + i)));
+        }
+        pieces_offset += 20;
+        printf("\n");
+    }
+
+    free(buf);
 }
 
-void print_decoded_string(d_res_t* decoded_str) {
-    switch (decoded_str->type) {
-        case STRING_TYPE:
-            printf("\"%s\"\n", decoded_str->data.v_str);
-            break;
-        case LONG_TYPE:
-            printf("%ld\n", decoded_str->data.v_long);
-            break;
-        case LIST_TYPE:
-            print_list(decoded_str);           
-            printf("\n");
-            break;
-        case DICT_TYPE:
-            print_dict(decoded_str);
-            printf("\n");
-            break;
+
+
+static void handle_peers(const char* filename) {
+    d_res_t* decoded_string = decode_from_file(filename);
+
+    array_list_t* keys = decoded_string->data.v_dict->keys;
+    array_list_t* values = decoded_string->data.v_dict->values;
+
+    char* tracker_url = get_tracker_url(decoded_string);
+
+
+    unsigned char* info_dict_hash = get_info_dict_hash(filename);
+    char* encoded_info_dict_hash = url_encode(info_dict_hash);
+
+    char* params = malloc(get_file_length(filename));
+    sprintf(params, "?info_hash=%s&peer_id=%s&port=%d&uploaded=0&downloaded=0&left=%ld&compact=1", encoded_info_dict_hash,
+            UNIQUE_CLIENT_ID,
+            LISTENING_PORT,
+            get_file_length(filename));
+
+
+    char* tracker_url_with_params = strcat(tracker_url, params);
+
+    fprintf(stderr, "URL --> %s\n", tracker_url_with_params);
+
+    free(params);
+    free(encoded_info_dict_hash);
+
+    CURL* curl;
+    CURLcode result;
+
+    curl = curl_easy_init();
+
+    if (curl == NULL) {
+        fprintf(stderr, "HTTP request failed\n");
+        exit(1);
     }
+
+
+    response_t response;
+    response.string = malloc(1);
+    response.size = 0;
+
+    curl_easy_setopt(curl, CURLOPT_URL, tracker_url_with_params);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_chunk);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void* ) &response);
+
+    result = curl_easy_perform(curl);
+
+    if (result != CURLE_OK) {
+        fprintf(stderr, "Error: %s\n", curl_easy_strerror(result));
+        exit(-1);
+    }
+
+    printf("%s\n", response.string);
+
+    curl_easy_cleanup(curl);
+    free(response.string);
+}
+
+size_t write_chunk(void* data, size_t size, size_t nmemb, void* userdata) {
+    size_t real_size = size * nmemb;
+
+    response_t* response = (response_t * ) userdata;
+
+    char *ptr = realloc(response->string, response->size + real_size + 1);
+
+    if (ptr == NULL) {
+        return CURL_WRITEFUNC_ERROR;
+    }
+
+    response->string = ptr;
+    memcpy(&(response->string[response->size]), data, real_size);
+    response->size += real_size;
+    response->string[response->size] = '\0';
+
+    return real_size;
 }
 
 int main(int argc, char* argv[]) {
-	// Disable output buffering
-	setbuf(stdout, NULL);
- 	setbuf(stderr, NULL);
+    // Disable output buffering
+    setbuf(stdout, NULL);
+    setbuf(stderr, NULL);
 
     if (argc < 3) {
         fprintf(stderr, "Usage: your_bittorrent.sh <command> <args>\n");
@@ -124,104 +227,10 @@ int main(int argc, char* argv[]) {
 
     const char* command = argv[1];
 
-    /* ---- DECODE ----*/
     if (strcmp(command, "decode") == 0) {
-        const char* encoded_str = argv[2];
-
-        d_res_t* decoded_str = decode(encoded_str);
-        
-        print_decoded_string(decoded_str);
-        d_res_free(decoded_str);
-
-    /* ---- INFO ----*/
+        handle_decode(argv[2]);
     } else if (strcmp(command, "info") == 0) {
-        const char* filename = argv[2];
-        FILE* fp = fopen(filename, "rb");
-        if (fp == NULL) {
-            fprintf(stderr, "No such file: %s\n", filename);
-            exit(1);
-        }
-
-        
-        fseek(fp, 0L, SEEK_END);
-        int file_size = ftell(fp);
-        rewind(fp);
-
-        char buf[file_size];
-
-        for (int i = 0; i < file_size; i++) {
-            buf[i] = getc(fp);
-        }
-
-        int* current_index = malloc(sizeof(int));
-        *current_index = 1;
-        d_res_t* decoded_string = decode_dict((char*)buf, current_index, file_size);
-
-        free(current_index);
-
-        array_list_t* keys = decoded_string->data.v_dict->keys;
-        array_list_t* values = decoded_string->data.v_dict->values;
-
-        d_res_t* info_dict;
-        long piece_length;
-
-        for (int i = 0; i < keys->len; i++) {
-            if (strcmp(keys->data[i]->data.v_str, "announce") == 0) {
-                printf("Tracker URL: %s\n", values->data[i]->data.v_str);
-            }
-
-            if (strcmp(keys->data[i]->data.v_str, "info") == 0) {
-                info_dict = values->data[i];
-                for (int j = 0; j < values->data[i]->data.v_dict->keys->len; j++) {
-                    if (strcmp(values->data[i]->data.v_dict->keys->data[j]->data.v_str, "length") == 0) {
-                        printf("Length: %ld\n", values->data[i]->data.v_dict->values->data[j]->data.v_long);
-                    }
-
-                    if (strcmp(values->data[i]->data.v_dict->keys->data[j]->data.v_str, "piece length") == 0) {
-                        piece_length = values->data[i]->data.v_dict->values->data[j]->data.v_long;
-                    }
-                }
-            }
-        }
-
-        /*---- CALCULATING SHA1 OF INFO DICT ----*/
-        long infodict_offset = strstr(buf, "info") - buf + 4;
-        char encoded_info_dict[file_size - infodict_offset - 1]; 
-        for (int i = 0; i < file_size - infodict_offset - 1; i++) {
-            encoded_info_dict[i] = *(buf + infodict_offset + i);
-        }
-        printf("Encoded info dict: %s\n", encoded_info_dict);
-        
-        unsigned char hash[SHA_DIGEST_LENGTH];
-        SHA1((unsigned char*)encoded_info_dict, file_size - infodict_offset - 1, hash);
-        printf("Offset char: %c\n", buf[infodict_offset + 1]);
-        
-        printf("Info Hash: ");
-        for (int i = 0; i < SHA_DIGEST_LENGTH; i++) {
-            printf("%02x", hash[i]);
-        }
-        printf("\n");
-
-        /*---- PRINTING PIECES ----*/
-
-        printf("Piece Length: %ld\n", piece_length);
-
-        printf("Piece Hashes:\n");
-        char* pieces_index = strstr(buf, "pieces");
-        char* start_index = strchr(pieces_index, ':');
-        long pieces_offset = start_index - buf + 1;
-        while (file_size - pieces_offset > SHA_DIGEST_LENGTH) {
-            for (int i = 0; i < SHA_DIGEST_LENGTH; i++) {
-                printf("%02x", (unsigned char)(*(buf + pieces_offset + i)));
-            }
-            pieces_offset += 20;
-            printf("\n");
-        }
-
-
-
-        d_res_free(decoded_string);
-        fclose(fp);
+        handle_info(argv[2]);
     } else if (strcmp(command, "encode") == 0) {
 
         const char* encoded_str = argv[2];
@@ -234,6 +243,8 @@ int main(int argc, char* argv[]) {
         free(result);
         d_res_free(decoded_str);
 
+    } else if (strcmp(command, "peers") == 0) {
+        handle_peers(argv[2]);
     } else {
         fprintf(stderr, "Unknown command: %s\n", command);
         return 1;
